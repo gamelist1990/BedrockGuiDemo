@@ -16,8 +16,11 @@ GUIはDear ImGuiのドッキング対応版を使用。ダッシュボード、�
   D3D11On12を利用してImGuiを合成
 - リサイズ時のGPUバックバッファと描画ターゲット再作成
 - F10でGUI表示ON/OFF
-- WndProcからImGuiへ入力を転送（ゲーム内マウスロックは実機調整が必要）
-- Minecraft内部のActorやClientInstanceの不確かなABIに依存しない
+- ネイティブのClientInstance::releaseCursor/grabCursor（Latite方式）
+- GameCore::handleMouseInputでGUI中のゲームクリック/ホットバースクロールを遮断
+- WndProcマウス/ホイール/RAW INPUTをImGuiへ渡し、ゲーム側には伝播させない
+- F10やGUIクローズ時に入力をゲームへ復帰
+- 対応版のGameCore / ClientInstance関数候補のみ使い、未検証のMouseDevice内部レイアウトは読み書きしない
 
 **注意:** Minecraft 1.26.52.3 + GDK Protonの実機表示・入力確認は
 まだ未実施。ビルド成功だけで描画成功とは判定しません。

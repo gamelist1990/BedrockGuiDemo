@@ -213,6 +213,9 @@ static void components(DemoState& s) {
     smallText(ui::Overlay::nativeCursorReady() ?
         "Native ClientInstance cursor: READY" :
         "Native ClientInstance cursor: WAITING (requires a game cursor event)");
+    smallText(ui::Overlay::gameMouseBlocked() ?
+        "Minecraft click / hotbar blocker: ACTIVE" :
+        "Minecraft click / hotbar blocker: FALLBACK (WndProc only)");
     smallText("TrueType font with oversampled anti-aliasing");
     smallText("Frame-time animation interpolation");
     smallText("Native Minecraft swap-chain rendering");
