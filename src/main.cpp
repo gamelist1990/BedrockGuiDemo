@@ -1,3 +1,4 @@
+// Native, interactive in-game Minecraft UI. No separate Windows GUI window.
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -7,238 +8,328 @@
 #include <bedrock/gui.hpp>
 #include <imgui.h>
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <string>
+#include <cstdio>
 
-using bedrock::gui::Color;
-using bedrock::gui::Vec2;
 namespace ui = bedrock::gui;
 namespace draw = bedrock::gui::draw;
+using ui::Vec2;
+using ui::Color;
 
 struct DemoState {
-    int page = 0;
-    bool enabled = true;
-    bool modern = true;
-    bool notifications = true;
-    float volume = 0.72f;
-    float radius = 12.f;
-    float glass = 0.92f;
-    Color accent{0.45f, 0.59f, 1.0f, 1.0f};
-    char project[64] = "My Minecraft Client";
-    float animation = 0.f;
-    float simulatedFps = 144.f;
-    std::array<float,120> graph{};
-    int graphOffset = 0;
-    std::string lastAction = "GUI backend initialized";
-    void tick() {
-        animation = ui::smooth(animation, enabled ? 1.f : 0.f,
-                               9.f, ImGui::GetIO().DeltaTime);
-        graph[graphOffset++ % graph.size()] =
-            118.f + 15.f * std::sin(static_cast<float>(ImGui::GetTime()) * 2.0f);
+    int page=0;
+    bool autoSprint=true;
+    bool hud=true;
+    bool notifications=true;
+    bool animations=true;
+    bool shadow=true;
+    float uiScale=1.0f;
+    float opacity=0.94f;
+    float accentHue=0.62f;
+    float easing=0.f;
+    float activity=0.f;
+    float graph[96]{};
+    int graphHead=0;
+    Color accent{.43f,.59f,1.0f,1.0f};
+    char clientName[80]="Bedrock Dynamic Client";
+    std::string status="Overlay ready. F10 to toggle.";
+    void frame() {
+        const float dt=std::min(ImGui::GetIO().DeltaTime,.1f);
+        easing=ui::smooth(easing,animations?1.f:0.f,8.f,dt);
+        activity+=dt;
+        if (activity>=.075f) {
+            activity=0.f;
+            graph[graphHead++ % 96]=.60f + .22f*std::sin((float)ImGui::GetTime()*1.1f)
+                                      + .13f*std::sin((float)ImGui::GetTime()*2.65f);
+        }
     }
 };
+static DemoState state;
 
-static void background() {
-    const auto p = ImGui::GetMainViewport();
-    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
-    const Vec2 lo = p->Pos;
-    const Vec2 hi{lo.x + p->Size.x, lo.y + p->Size.y};
-    // Do NOT cover Minecraft's rendered scene with an opaque rectangle.
-    drawList->AddRectFilled(lo,hi,draw::rgba(.017f,.023f,.045f,.23f));
-    drawList->AddCircleFilled({hi.x - 120,lo.y + 25}, 150,
-                              draw::rgba(.19f,.25f,.42f,.16f),60);
-}
-
-static void indicator(const char* label, const char* value, Vec2 size) {
-    ui::Panel panel(label,size);
-    if (!panel) return;
-    ui::muted(label);
-    ImGui::SetWindowFontScale(1.32f);
-    ui::text(value);
+static void title(const char* name,const char* caption) {
+    ImGui::SetWindowFontScale(1.48f);
+    ui::text(name);
     ImGui::SetWindowFontScale(1.0f);
-}
-
-static void performanceGraph(const DemoState& s) {
-    auto p = ImGui::GetCursorScreenPos();
-    const float width = ImGui::GetContentRegionAvail().x;
-    const float height = 116.f;
-    ImDrawList* d = ImGui::GetWindowDrawList();
-    d->AddRectFilled(p, {p.x + width,p.y+height},
-        draw::rgba(.070f,.095f,.16f),10.f);
-    for (int i=1;i<4;++i) {
-        const float y = p.y + i*height/4.f;
-        d->AddLine({p.x+8,y},{p.x+width-8,y},draw::rgba(.28f,.34f,.49f,.20f));
-    }
-    for (int i=1;i<119;++i) {
-        const int idx1=(s.graphOffset+i-1) % s.graph.size();
-        const int idx2=(s.graphOffset+i) % s.graph.size();
-        const float x1=p.x + 10.f + (i-1)*(width-20.f)/118.f;
-        const float x2=p.x + 10.f + i*(width-20.f)/118.f;
-        const float y1=p.y + height-10.f - (s.graph[idx1]-85.f)*1.35f;
-        const float y2=p.y + height-10.f - (s.graph[idx2]-85.f)*1.35f;
-        d->AddLine({x1,y1},{x2,y2},draw::rgba(.49f,.68f,1.f),2.2f);
-    }
-    ImGui::Dummy({width,height});
-}
-
-static void dashboard(DemoState& s) {
-    ui::heading("Overview",1.42f);
-    ui::muted("A native, fully customizable UI for your Bedrock client");
-    ui::space(6);
-    indicator("CLIENT",s.enabled ? "ACTIVE" : "DISABLED",{205,96});
-    ImGui::SameLine();
-    indicator("RENDERER","DirectX 11",{205,96});
-    ImGui::SameLine();
-    indicator("DATA SOURCE","Optional",{205,96});
+    ImGui::PushStyleColor(ImGuiCol_Text,ImVec4{.56f,.62f,.75f,1.f});
+    ui::text(caption);
+    ImGui::PopStyleColor();
     ui::space(10);
-    {
-        ui::Panel panel("performance", {0,210});
-        if(panel) {
-            ui::heading("Frame timeline",1.1f);
-            ui::muted("Visual demonstration - synthetic data");
-            performanceGraph(s);
-        }
+}
+
+static bool navButton(const char* id,const char* name,bool chosen) {
+    ImGui::PushStyleColor(ImGuiCol_Header,
+                          chosen ? ImVec4{.22f,.29f,.49f,.94f} : ImVec4{0,0,0,0});
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,ImVec4{.23f,.31f,.52f,.9f});
+    const bool clicked=ImGui::Selectable(name,chosen,0,Vec2{0,48.f});
+    ImGui::PopStyleColor(2);
+    return clicked;
+}
+
+static void smallText(const char* name) {
+    ImGui::PushStyleColor(ImGuiCol_Text,ImVec4{.54f,.61f,.73f,1.f});
+    ui::text(name);
+    ImGui::PopStyleColor();
+}
+
+static void infoCard(const char* id,const char* metric,
+                     const char* detail,Vec2 size,ImU32 accent) {
+    ImGui::BeginChild(id,size,ImGuiChildFlags_Borders);
+    Vec2 min=ImGui::GetWindowPos();
+    auto* list=ImGui::GetWindowDrawList();
+    list->AddRectFilled({min.x+15,min.y+16},{min.x+19,min.y+45},accent,3.f);
+    ImGui::Indent(17);
+    smallText(detail);
+    ImGui::SetWindowFontScale(1.36f);
+    ui::text(metric);
+    ImGui::SetWindowFontScale(1.f);
+    ImGui::Unindent(17);
+    ImGui::EndChild();
+}
+
+static void toggleSetting(const char* label,const char* description,bool& value) {
+    const auto start=ImGui::GetCursorScreenPos();
+    ImGui::PushID(label);
+    ui::text(label);
+    smallText(description);
+    const float width=ImGui::GetContentRegionAvail().x;
+    ImGui::SameLine(width-68.f);
+    // Wide hit region with a real ImGui control; toggle has keyboard support.
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY()-32.f);
+    ImGui::Checkbox("##toggle",&value);
+    ImGui::PopID();
+    ui::space(12);
+}
+
+static void moduleCard(const char* id,const char* titleText,
+                       const char* caption,bool& enabled,
+                       ImU32 accentColor) {
+    ImGui::BeginChild(id,{0,99},ImGuiChildFlags_Borders);
+    Vec2 p=ImGui::GetWindowPos();
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        {p.x+13,p.y+18},{p.x+17,p.y+64},accentColor,4.f);
+    ImGui::Indent(15);
+    ui::text(titleText);
+    smallText(caption);
+    ImGui::Unindent(15);
+    ImGui::SameLine(ImGui::GetWindowWidth()-71.f);
+    ImGui::SetCursorPosY(36.f);
+    ImGui::Checkbox("##enabled",&enabled);
+    ImGui::EndChild();
+}
+
+static void performance(DemoState& s) {
+    auto* list=ImGui::GetWindowDrawList();
+    const Vec2 p=ImGui::GetCursorScreenPos();
+    const float w=ImGui::GetContentRegionAvail().x;
+    constexpr float h=132.f;
+    list->AddRectFilled(p,{p.x+w,p.y+h},draw::rgba(.065f,.083f,.14f),13.f);
+    for(int i=1;i<=3;++i) {
+        float y=p.y + i*h/4.f;
+        list->AddLine({p.x+12,y},{p.x+w-12,y},draw::rgba(.26f,.34f,.50f,.24f));
+    }
+    for(int i=1;i<96;++i) {
+        int ia=(s.graphHead+i-1)%96;
+        int ib=(s.graphHead+i)%96;
+        const float x1=p.x+14.f+(i-1)*(w-28.f)/95.f;
+        const float x2=p.x+14.f+i*(w-28.f)/95.f;
+        const float y1=p.y+h-9.f-s.graph[ia]*(h-22.f);
+        const float y2=p.y+h-9.f-s.graph[ib]*(h-22.f);
+        list->AddLine({x1,y1},{x2,y2},draw::rgba(.46f,.66f,1.f,.92f),2.3f);
+    }
+    ImGui::Dummy({w,h});
+}
+
+static void overview(DemoState& s) {
+    title("Dashboard","Your in-game client workspace");
+    const float w=ImGui::GetContentRegionAvail().x;
+    const float gap=12.f;
+    const float card=(w-gap*2.f)/3.f;
+    infoCard("health","CONNECTED","CLIENT STATUS",{card,96},draw::rgba(.30f,.80f,.60f));
+    ImGui::SameLine(0,gap);
+    infoCard("render","DXGI","RENDER BRIDGE",{card,96},draw::rgba(.45f,.65f,1.f));
+    ImGui::SameLine(0,gap);
+    infoCard("backend","F10","MENU HOTKEY",{card,96},draw::rgba(.77f,.59f,1.f));
+    ui::space(12);
+    ImGui::BeginChild("modules",{0,275},ImGuiChildFlags_Borders);
+    ImGui::SetWindowFontScale(1.20f); ui::text("Modules"); ImGui::SetWindowFontScale(1.f);
+    smallText("Simple, independent event-based extensions");
+    ui::space(12);
+    moduleCard("autosprint","AutoSprint","Forward input shortcut",s.autoSprint,
+               draw::rgba(.46f,.66f,1.f));
+    ui::space(4);
+    moduleCard("hud","Client HUD","Custom on-screen visuals",s.hud,
+               draw::rgba(.52f,.86f,.70f));
+    ImGui::EndChild();
+    ui::space(12);
+    ImGui::BeginChild("timeline",{0,210},ImGuiChildFlags_Borders);
+    ImGui::SetWindowFontScale(1.16f);ui::text("Performance preview");ImGui::SetWindowFontScale(1.f);
+    smallText("Animated example data, not measured FPS");
+    ui::space(5);
+    performance(s);
+    ImGui::EndChild();
+}
+
+static void components(DemoState& s) {
+    title("Appearance","Fine-tune your client's look and feel");
+    ImGui::BeginChild("appearance",{0,0},ImGuiChildFlags_Borders);
+    ImGui::SetWindowFontScale(1.2f);ui::text("Interface");ImGui::SetWindowFontScale(1.f);
+    smallText("Comfortable spacing, smooth geometry and readable type");
+    ui::space(15);
+    ImGui::Checkbox("Smooth animations",&s.animations);
+    ui::space(5);
+    ImGui::Checkbox("Notifications",&s.notifications);
+    ui::space(8);
+    ImGui::SetNextItemWidth(std::min(430.f,ImGui::GetContentRegionAvail().x));
+    ImGui::SliderFloat("Opacity",&s.opacity,.65f,1.f,"%.0f%%",ImGuiSliderFlags_None);
+    ui::space(7);
+    ImGui::SetNextItemWidth(std::min(430.f,ImGui::GetContentRegionAvail().x));
+    ImGui::ColorEdit3("Accent colour",&s.accent.x,ImGuiColorEditFlags_NoInputs);
+    ui::space(12);
+    smallText("CLIENT IDENTITY");
+    ImGui::SetNextItemWidth(std::min(540.f,ImGui::GetContentRegionAvail().x));
+    ImGui::InputText("##clientName",s.clientName,sizeof(s.clientName));
+    ui::space(17);
+    if (ui::button("Apply theme",{175,42})) {
+        ui::Theme::dark(s.accent);
+        s.status="Appearance changes applied";
+    }
+    ImGui::SameLine();
+    if (ui::button("Reset",{125,42})) {
+        s.accent={.43f,.59f,1.0f,1.f};
+        s.opacity=.94f;
+        s.animations=true;
+        ui::Theme::dark(s.accent);
+        s.status="Appearance reset";
+    }
+    ui::space(16);
+    ImGui::Separator();
+    ui::space(12);
+    ImGui::SetWindowFontScale(1.1f);ui::text("Rendering");ImGui::SetWindowFontScale(1.f);
+    smallText("TrueType font with oversampled anti-aliasing");
+    smallText("Frame-time animation interpolation");
+    smallText("Native Minecraft swap-chain rendering");
+    ImGui::EndChild();
+}
+
+static void canvas(DemoState& s) {
+    title("Canvas","Build your own interactive widgets and overlays");
+    ImGui::BeginChild("customCanvas",{0,320},ImGuiChildFlags_Borders);
+    const Vec2 pos=ImGui::GetCursorScreenPos();
+    const float width=ImGui::GetContentRegionAvail().x;
+    const Vec2 a{pos.x+10.f,pos.y+10.f};
+    const Vec2 b{pos.x+width-10.f,pos.y+203.f};
+    auto* list=ImGui::GetWindowDrawList();
+    list->AddRectFilled(a,b,draw::rgba(.095f,.13f,.23f),15.f);
+    const float pulse=.5f+.5f*std::sin((float)ImGui::GetTime()*1.7f);
+    list->AddRectFilledMultiColor({a.x+12.f,a.y+12.f},{b.x-12.f,b.y-12.f},
+        draw::rgba(.22f,.39f,.78f,.96f),draw::rgba(.35f,.38f,.78f,.9f),
+        draw::rgba(.28f,.20f,.53f,.93f),draw::rgba(.14f,.23f,.52f,.95f));
+    list->AddCircleFilled({a.x+72.f,a.y+94.f},23.f,
+        draw::rgba(.64f,.79f,1.f,.6f+.4f*pulse),48);
+    list->AddText({a.x+118.f,a.y+60.f},draw::rgba(1.f,1.f,1.f),
+                  "Custom UI drawing");
+    list->AddText({a.x+118.f,a.y+94.f},draw::rgba(.80f,.87f,1.f),
+                  "Animated primitives, lines and gradients");
+    ImGui::Dummy({width,235.f});
+    smallText("Rendered directly on Minecraft's scene via DXGI.");
+    ImGui::EndChild();
+    ui::space(16);
+    if (ui::button("Trigger motion",{190,45})) {
+        s.easing=0.f;
+        s.status="Animation triggered";
+    }
+    ImGui::SameLine();
+    smallText("All transitions are based on frame time.");
+}
+
+static void drawUi(DemoState& s) {
+    s.frame();
+    const ImGuiViewport* viewport=ImGui::GetMainViewport();
+    if (!viewport) return;
+    // Leave the Minecraft world visible behind the floating client panel.
+    const float width=std::min(1060.f,viewport->WorkSize.x-34.f);
+    const float height=std::min(740.f,viewport->WorkSize.y-32.f);
+    if (width<540.f || height<430.f) return;
+    const Vec2 pos{viewport->WorkPos.x+(viewport->WorkSize.x-width)*.5f,
+                   viewport->WorkPos.y+(viewport->WorkSize.y-height)*.5f};
+    ImGui::SetNextWindowPos(pos,ImGuiCond_Always);
+    ImGui::SetNextWindowSize({width,height},ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(s.opacity);
+    ui::Window shell("##BedrockClient",nullptr,
+        ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoDecoration|
+        ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize);
+    if (!shell) return;
+
+    // Header
+    const float full=ImGui::GetContentRegionAvail().x;
+    ImGui::SetWindowFontScale(1.28f);
+    ui::text("BEDROCK");
+    ImGui::SetWindowFontScale(1.f);
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(160.f);
+    smallText("DYNAMIC SDK   /   IN-GAME CLIENT");
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(full-92.f);
+    if (ui::button("X  F10",{88.f,32.f})) {
+        ui::Overlay::show(false);
     }
     ui::space(7);
-    {
-        ui::Panel panel("quick actions",{0,170});
-        if(panel) {
-            ui::heading("Quick actions",1.1f);
-            ui::toggle("Enable client",s.enabled);
-            ImGui::SameLine(220);
-            ui::toggle("Toast notifications",s.notifications);
-            ui::slider("Interface opacity",s.glass,0.55f,1.f);
-            if(ui::button("Apply theme",{150,32})) {
-                ui::Theme::dark(s.accent);
-                s.lastAction="Theme applied";
-            }
-        }
-    }
-}
+    ui::separator();
+    ui::space(9);
 
-static void widgets(DemoState& s) {
-    ui::heading("Component lab",1.40f);
-    ui::muted("Layout, animation, controls and low-level drawing");
-    ui::space(10);
-    ui::Panel container("controls", {0,260});
-    if (!container) return;
-    ui::toggle("Enable UI effects",s.modern);
-    ui::slider("Corner radius",s.radius,0.f,25.f);
-    ui::slider("Master volume",s.volume,0.f,1.f);
-    ui::colorPicker("Accent color",s.accent);
-    ui::input("Client name",s.project,sizeof(s.project));
-    ui::progress(s.volume);
-}
+    const float bottom=ImGui::GetContentRegionAvail().y - 54.f;
+    ImGui::BeginChild("##Navigation",{203.f,bottom},ImGuiChildFlags_Borders);
+    smallText("WORKSPACE");
+    ui::space(11);
+    if (navButton("nav1","  Overview",s.page==0)) s.page=0;
+    if (navButton("nav2","  Appearance",s.page==1)) s.page=1;
+    if (navButton("nav3","  UI Canvas",s.page==2)) s.page=2;
+    ui::space(16);
+    smallText("QUICK ACCESS");
+    ui::space(7);
+    ImGui::TextColored({.56f,.79f,1.f,1.f},"  [F10]  Hide / Show");
+    ImGui::EndChild();
+    ImGui::SameLine(0,14.f);
 
-static void customCanvas(DemoState& s) {
-    ui::heading("Custom canvas",1.35f);
-    ui::muted("Use ImGui draw lists or the SDK's draw helpers");
-    ui::space(12);
-    {
-        ui::Panel panel("canvas", {0,220});
-        if(panel) {
-            Vec2 p=ImGui::GetCursorScreenPos();
-            const Vec2 a{p.x+14,p.y+14};
-            const Vec2 b{p.x+ImGui::GetContentRegionAvail().x-16,p.y+125};
-            draw::gradient(a,b,draw::rgba(.22f,.39f,.88f),
-                draw::rgba(.38f,.30f,.83f),draw::rgba(.22f,.17f,.51f),
-                draw::rgba(.16f,.30f,.62f));
-            draw::rect(a,b,draw::rgba(.65f,.74f,1.f,.9f),s.radius,1.2f);
-            draw::circle({a.x+28,a.y+34},9,draw::rgba(.94f,.95f,1.f));
-            draw::text({a.x+54,a.y+24},draw::rgba(1.f,1.f,1.f),
-                       "Custom gradients / primitives");
-            ImGui::Dummy({0,145});
-            ui::muted("Animations, icons, images and shaders can be added by your renderer.");
-        }
-    }
-    ui::space(12);
-    if(ui::button("Trigger animation",{185,38})) {
-        s.animation=0.f;
-        s.enabled=true;
-        s.lastAction="Animation triggered";
-    }
-    ui::sameLine();
-    ui::muted("Client controls remain independent of the SDK core.");
-}
+    ImGui::BeginChild("##Content",{0,bottom},ImGuiChildFlags_None);
+    if (s.page==0) overview(s);
+    else if (s.page==1) components(s);
+    else canvas(s);
+    ImGui::EndChild();
 
-static void render(DemoState& s) {
-    s.tick();
-    background();
-    const auto& viewport = *ImGui::GetMainViewport();
-    const Vec2 pageSize{
-        std::clamp(viewport.WorkSize.x * 0.73f, 800.f, 1060.f),
-        std::clamp(viewport.WorkSize.y * 0.79f, 570.f, 740.f)};
-    ImGui::SetNextWindowPos({
-        viewport.WorkPos.x + (viewport.WorkSize.x-pageSize.x)*0.5f,
-        viewport.WorkPos.y + (viewport.WorkSize.y-pageSize.y)*0.5f
-    },ImGuiCond_Always);
-    ImGui::SetNextWindowSize(pageSize,ImGuiCond_Always);
-    ui::Window shell("##shell",nullptr,
-        ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
-        ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoBringToFrontOnFocus);
-    {
-        ui::Panel sidebar("NAVIGATION",{205,0},ImGuiChildFlags_Borders);
-        if(sidebar) {
-            ui::heading("BEDROCK",1.48f);
-            ui::muted("Dynamic SDK / GUI");
-            ui::space(21);
-            const char* pages[]={"Overview", "Components", "Canvas"};
-            for (int i=0;i<3;++i) {
-                if(ImGui::Selectable(pages[i],s.page==i,0,{185,43}))
-                    s.page=i;
-            }
-            ui::space(210);
-            ui::separator();
-            ui::muted("In-game overlay sample");
-            ui::text("Dear ImGui / RenderDragon");
-        }
-    }
-    ui::sameLine(0,16);
-    {
-        ui::Panel content("CONTENT",{0,0},ImGuiChildFlags_None);
-        if(content) {
-            if(s.page==0) dashboard(s);
-            if(s.page==1) widgets(s);
-            if(s.page==2) customCanvas(s);
-            ui::space(13);
-            ui::separator();
-            ui::muted(s.lastAction);
-        }
-    }
-    // Optional, unobtrusive custom replacement for the bottom-right version
-    // label. This visually overlays text without modifying the actual game UI.
-    const char* hudLabel = "BedrockDynamicSDK  |  GUI Preview";
-    const Vec2 hudSize=ImGui::CalcTextSize(hudLabel);
-    const Vec2 loc{
-        viewport.WorkPos.x+viewport.WorkSize.x-hudSize.x-27.f,
-        viewport.WorkPos.y+viewport.WorkSize.y-hudSize.y-18.f
-    };
-    auto* hud=ImGui::GetForegroundDrawList();
-    hud->AddRectFilled({loc.x-10.f,loc.y-6.f},
-        {loc.x+hudSize.x+10.f,loc.y+hudSize.y+6.f},
-        draw::rgba(.065f,.080f,.135f,.88f),7.0f);
-    hud->AddText(loc,draw::rgba(.82f,.89f,1.0f),hudLabel);
+    // Footer / status line
+    ui::space(7);
+    ui::separator();
+    ImGui::TextColored({.43f,.86f,.66f,1.f},"* ");
+    ImGui::SameLine(0,2.f);
+    ui::text(s.status);
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(full-124.f);
+    smallText("v1.26 / Preview");
 }
 
 #ifdef _WIN32
-namespace {
-    DemoState g_demo;
-    DWORD WINAPI initializeOverlay(void*) {
-        std::string error;
-        const bool okay = bedrock::gui::Overlay::install(
-            [](void* context) { render(*static_cast<DemoState*>(context)); },
-            &g_demo, error);
-        if (!okay) {
-            OutputDebugStringA(("BedrockGuiOverlay: " + error + "\n").c_str());
-        } else {
-            OutputDebugStringA(
-                "BedrockGuiOverlay: in-game renderer installed. Press F10 to toggle.\n");
-        }
-        return okay ? 0 : 1;
+static DWORD WINAPI initializeOverlay(void*) {
+    std::string error;
+    bedrock::gui::OverlayOptions options;
+    options.initiallyVisible=true;
+    options.toggleVirtualKey=VK_F10;
+    options.captureInput=true;
+    options.unlockMouse=true;
+    const bool result=bedrock::gui::Overlay::install(
+        [](void* data) { drawUi(*static_cast<DemoState*>(data)); },
+        &state,error,options);
+    if (!result) {
+        OutputDebugStringA(("BedrockGuiOverlay: "+error+"\n").c_str());
+    } else {
+        OutputDebugStringA("BedrockGuiOverlay ready: F10 to toggle; cursor unlocked\n");
     }
+    return result ? 0 : 1;
 }
-extern "C" __declspec(dllexport) void BedrockGuiOverlay_Show(BOOL value) {
-    bedrock::gui::Overlay::show(value != 0);
+extern "C" __declspec(dllexport) void BedrockGuiOverlay_Show(BOOL show) {
+    bedrock::gui::Overlay::show(show != FALSE);
 }
 extern "C" __declspec(dllexport) BOOL BedrockGuiOverlay_Active() {
     return bedrock::gui::Overlay::running() ? TRUE : FALSE;
@@ -246,12 +337,11 @@ extern "C" __declspec(dllexport) BOOL BedrockGuiOverlay_Active() {
 extern "C" __declspec(dllexport) void BedrockGuiOverlay_Stop() {
     bedrock::gui::Overlay::shutdown();
 }
-BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID) {
-    if (reason == DLL_PROCESS_ATTACH) {
+BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,LPVOID) {
+    if (reason==DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(module);
-        HANDLE thread = CreateThread(nullptr, 0, &initializeOverlay,
-                                     nullptr, 0, nullptr);
-        if (thread) CloseHandle(thread);
+        HANDLE worker=CreateThread(nullptr,0,initializeOverlay,nullptr,0,nullptr);
+        if (worker) CloseHandle(worker);
     }
     return TRUE;
 }
