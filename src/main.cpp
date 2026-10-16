@@ -317,7 +317,7 @@ static DWORD WINAPI initializeOverlay(void*) {
     options.initiallyVisible=true;
     options.toggleVirtualKey=VK_F10;
     options.captureInput=true;
-    options.unlockMouse=true;
+    options.nativeCursor=true;
     const bool result=bedrock::gui::Overlay::install(
         [](void* data) { drawUi(*static_cast<DemoState*>(data)); },
         &state,error,options);
