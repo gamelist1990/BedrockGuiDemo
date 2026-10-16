@@ -43,9 +43,8 @@ static void background() {
     ImDrawList* drawList = ImGui::GetBackgroundDrawList();
     const Vec2 lo = p->Pos;
     const Vec2 hi{lo.x + p->Size.x, lo.y + p->Size.y};
-    drawList->AddRectFilledMultiColor(
-        lo,hi,draw::rgba(.045f,.054f,.090f), draw::rgba(.065f,.075f,.135f),
-        draw::rgba(.037f,.043f,.075f),draw::rgba(.05f,.060f,.10f));
+    // Do NOT cover Minecraft's rendered scene with an opaque rectangle.
+    drawList->AddRectFilled(lo,hi,draw::rgba(.017f,.023f,.045f,.23f));
     drawList->AddCircleFilled({hi.x - 120,lo.y + 25}, 150,
                               draw::rgba(.19f,.25f,.42f,.16f),60);
 }
@@ -167,9 +166,12 @@ static void render(DemoState& s) {
     background();
     const auto& viewport = *ImGui::GetMainViewport();
     const Vec2 pageSize{
-        std::max(850.f, viewport.WorkSize.x-24.f),
-        std::max(550.f, viewport.WorkSize.y-24.f)};
-    ImGui::SetNextWindowPos({viewport.WorkPos.x+12,viewport.WorkPos.y+12},ImGuiCond_Always);
+        std::clamp(viewport.WorkSize.x * 0.73f, 800.f, 1060.f),
+        std::clamp(viewport.WorkSize.y * 0.79f, 570.f, 740.f)};
+    ImGui::SetNextWindowPos({
+        viewport.WorkPos.x + (viewport.WorkSize.x-pageSize.x)*0.5f,
+        viewport.WorkPos.y + (viewport.WorkSize.y-pageSize.y)*0.5f
+    },ImGuiCond_Always);
     ImGui::SetNextWindowSize(pageSize,ImGuiCond_Always);
     ui::Window shell("##shell",nullptr,
         ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
@@ -187,8 +189,8 @@ static void render(DemoState& s) {
             }
             ui::space(210);
             ui::separator();
-            ui::muted("Standalone UI sample");
-            ui::text("Dear ImGui + DX11");
+            ui::muted("In-game overlay sample");
+            ui::text("Dear ImGui / RenderDragon");
         }
     }
     ui::sameLine(0,16);
@@ -203,6 +205,19 @@ static void render(DemoState& s) {
             ui::muted(s.lastAction);
         }
     }
+    // Optional, unobtrusive custom replacement for the bottom-right version
+    // label. This visually overlays text without modifying the actual game UI.
+    const char* hudLabel = "BedrockDynamicSDK  |  GUI Preview";
+    const Vec2 hudSize=ImGui::CalcTextSize(hudLabel);
+    const Vec2 loc{
+        viewport.WorkPos.x+viewport.WorkSize.x-hudSize.x-27.f,
+        viewport.WorkPos.y+viewport.WorkSize.y-hudSize.y-18.f
+    };
+    auto* hud=ImGui::GetForegroundDrawList();
+    hud->AddRectFilled({loc.x-10.f,loc.y-6.f},
+        {loc.x+hudSize.x+10.f,loc.y+hudSize.y+6.f},
+        draw::rgba(.065f,.080f,.135f,.88f),7.0f);
+    hud->AddText(loc,draw::rgba(.82f,.89f,1.0f),hudLabel);
 }
 
 #ifdef _WIN32
