@@ -17,10 +17,11 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(bedrock_sdk)
 
 if(WIN32)
-    add_executable(BedrockGuiDemo WIN32 src/main.cpp)
-    target_link_libraries(BedrockGuiDemo PRIVATE bedrock::gui_host)
+    # In-game DXGI DLL, NOT a separate Win32 window.
+    add_library(BedrockGuiOverlay SHARED src/main.cpp)
+    target_link_libraries(BedrockGuiOverlay PRIVATE bedrock::gui_overlay)
     if(MSVC)
-        set_property(TARGET BedrockGuiDemo PROPERTY MSVC_RUNTIME_LIBRARY
+        set_property(TARGET BedrockGuiOverlay PROPERTY MSVC_RUNTIME_LIBRARY
             "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     endif()
 endif()

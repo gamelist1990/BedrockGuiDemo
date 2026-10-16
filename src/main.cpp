@@ -3,7 +3,7 @@
 #define NOMINMAX
 #include <windows.h>
 #endif
-#include <bedrock/gui_host.hpp>
+#include <bedrock/gui_overlay.hpp>
 #include <bedrock/gui.hpp>
 #include <imgui.h>
 #include <array>
@@ -206,15 +206,38 @@ static void render(DemoState& s) {
 }
 
 #ifdef _WIN32
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    DemoState state;
-    bedrock::gui::HostOptions options{};
-    options.title = L"Bedrock GUI SDK - Interactive Demo";
-    options.width = 1110;
-    options.height = 760;
-    std::string error;
-    return bedrock::gui::GuiHost::run(options,[&] { render(state); },error) ? 0 : 1;
+namespace {
+    DemoState g_demo;
+    DWORD WINAPI initializeOverlay(void*) {
+        std::string error;
+        const bool okay = bedrock::gui::Overlay::install(
+            [](void* context) { render(*static_cast<DemoState*>(context)); },
+            &g_demo, error);
+        if (!okay) {
+            OutputDebugStringA(("BedrockGuiOverlay: " + error + "\n").c_str());
+        } else {
+            OutputDebugStringA(
+                "BedrockGuiOverlay: in-game renderer installed. Press F10 to toggle.\n");
+        }
+        return okay ? 0 : 1;
+    }
 }
-#else
-int main() {return 0;}
+extern "C" __declspec(dllexport) void BedrockGuiOverlay_Show(BOOL value) {
+    bedrock::gui::Overlay::show(value != 0);
+}
+extern "C" __declspec(dllexport) BOOL BedrockGuiOverlay_Active() {
+    return bedrock::gui::Overlay::running() ? TRUE : FALSE;
+}
+extern "C" __declspec(dllexport) void BedrockGuiOverlay_Stop() {
+    bedrock::gui::Overlay::shutdown();
+}
+BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID) {
+    if (reason == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(module);
+        HANDLE thread = CreateThread(nullptr, 0, &initializeOverlay,
+                                     nullptr, 0, nullptr);
+        if (thread) CloseHandle(thread);
+    }
+    return TRUE;
+}
 #endif

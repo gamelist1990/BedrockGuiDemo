@@ -1,53 +1,66 @@
-# BedrockGuiDemo
+# BedrockGuiDemo — Minecraft内オーバーレイ
 
-A native Dear ImGui + DirectX11 window showcasing the **optional**
-[BedrockDynamicSDK](https://github.com/gamelist1990/BedrockDynamicSDK)
-`bedrock::gui` and `bedrock::gui_host` APIs.
+Minecraft Bedrock Windows x64の既存画面に直接GUIを描画するDLLサンプルです。
+独立したウィンドウは生成しません。
 
-- Dashboard, navigation, rounded cards, dark theme, custom accent colors
-- Panels, tabs, switches, sliders, inputs, progress bars, gradient drawing
-- Smooth animations using delta time, sample performance timeline
-- Fully adjustable Dear ImGui widgets and draw lists via `ImGui::` directly
-- No game process access, injection, hooks or game-version dependencies
+SDK: https://github.com/gamelist1990/BedrockDynamicSDK
 
-## Build
+GUIはDear ImGuiのドッキング対応版を使用。ダッシュボード、サイドバー、
+設定、アクセントカラー、自由描画、グラフ、ボタン等を表示します。
 
-On Windows with Visual Studio 2022 and CMake:
+## 仕組み
 
-```powershell
-git clone https://github.com/gamelist1990/BedrockGuiDemo.git
-cd BedrockGuiDemo
-cmake -S . -B build -A x64
-cmake --build build --config Release
-.\build\Release\BedrockGuiDemo.exe
-```
+- Optional SDK target: bedrock::gui_overlay
+- DX11: MinecraftのIDXGISwapChain::PresentへImGui描画
+- DX12: IDXGISwapChain3::PresentとExecuteCommandListsからD3D12キューを取得し
+  D3D11On12を利用してImGuiを合成
+- リサイズ時のGPUバックバッファと描画ターゲット再作成
+- F10でGUI表示ON/OFF
+- WndProcからImGuiへ入力を転送（ゲーム内マウスロックは実機調整が必要）
+- Minecraft内部のActorやClientInstanceの不確かなABIに依存しない
 
-CMake **FetchContent** fetches the SDK from GitHub when building. The SDK
-only fetches Dear ImGui when `BEDROCK_SDK_ENABLE_GUI=ON`.
+**注意:** Minecraft 1.26.52.3 + GDK Protonの実機表示・入力確認は
+まだ未実施。ビルド成功だけで描画成功とは判定しません。
 
-## Making your own client GUI
+## ビルド
 
-```cpp
-#include <bedrock/gui.hpp>
-#include <bedrock/gui_host.hpp>
+Visual Studio 2022 / CMake:
 
-std::string error;
-bedrock::gui::HostOptions options;
-bedrock::gui::GuiHost::run(options, [] {
-    bedrock::gui::Window window("Client settings");
-    if (window) {
-        static bool enabled = false;
-        bedrock::gui::toggle("Enable", enabled);
+    git clone https://github.com/gamelist1990/BedrockGuiDemo.git
+    cd BedrockGuiDemo
+    cmake -S . -B build -A x64
+    cmake --build build --config Release
+
+DLL: build/Release/BedrockGuiOverlay.dll。
+GitHub Actionsからダウンロードできます。
+
+Minecraftプロセス起動後に、使用者のDLLローダーからロードします。
+ワーカースレッドで描画フックを作成。**独立GUIウィンドウは開きません**。
+
+F10で表示切替。BedrockGuiOverlay_Show(BOOL)で手動表示切替、
+BedrockGuiOverlay_Active()で稼働状態確認、
+BedrockGuiOverlay_Stop()でフック解除可能。
+フック稼働中はDLLをアンロードしないでください。
+
+## 使用例
+
+    #include <bedrock/gui.hpp>
+    #include <bedrock/gui_overlay.hpp>
+
+    void draw(void*) {
+        bedrock::gui::Window w("My Client");
+        if (w) {
+            static bool enabled = true;
+            bedrock::gui::toggle("Enabled", enabled);
+        }
     }
-}, error);
-```
+    // DLLロード後のワーカースレッドから:
+    std::string error;
+    bedrock::gui::Overlay::install(&draw, nullptr, error);
 
-`GuiHost::run` blocks on the calling GUI thread. Run outside `DllMain`.
-The SDK never automatically starts a worker thread or intercepts the game.
+SDKのGUI機能はデフォルトOFF。
+BEDROCK_SDK_ENABLE_GUI=ONを有効化した時だけDear ImGuiを取得・ビルド。
 
-**Important:** This is a **separate Win32 tool window**, not yet an ImGui layer
-drawn *inside* Minecraft. Rendering directly in Minecraft's swap chain
-requires a version-compatible DirectX backend adapter and real in-game testing.
-This demo intentionally does not claim that capability.
-
-The UI widgets and theming can be reused in a future in-game render adapter.
+GUIは src/main.cpp にあります。
+BetterRenderDragonで使用されているDX11/DX12・D3D11On12方式を参考にした
+独自実装で、AGPLのコードはコピーしていません。

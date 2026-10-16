@@ -1,11 +1,11 @@
-name: GUI demo
+name: Minecraft in-game GUI DLL
 on: [push, pull_request, workflow_dispatch]
 jobs:
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build native Win32/DirectX11 GUI
+      - name: Build native Minecraft in-game DX11/DX12 overlay
         shell: pwsh
         run: |
           cmake -S . -B build -A x64
@@ -14,6 +14,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
-          name: BedrockGuiDemo-windows-x64
-          path: build/Release/BedrockGuiDemo.exe
+          name: BedrockGuiOverlay-windows-x64
+          path: build/Release/BedrockGuiOverlay.dll
           if-no-files-found: error
