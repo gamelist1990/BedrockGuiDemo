@@ -1,3 +1,8 @@
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 #include <bedrock/gui_host.hpp>
 #include <bedrock/gui.hpp>
 #include <imgui.h>
