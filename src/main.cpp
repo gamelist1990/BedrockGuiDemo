@@ -150,7 +150,10 @@ static void overview(DemoState& s) {
     ImGui::SameLine(0,gap);
     infoCard("render","DXGI","RENDER BRIDGE",{card,96},draw::rgba(.45f,.65f,1.f));
     ImGui::SameLine(0,gap);
-    infoCard("backend","F10","MENU HOTKEY",{card,96},draw::rgba(.77f,.59f,1.f));
+    infoCard("backend",ui::Overlay::nativeCursorReady()?"READY":"WAITING",
+             "MOUSE BRIDGE",{card,96},
+             ui::Overlay::nativeCursorReady() ?
+                 draw::rgba(.32f,.80f,.60f) : draw::rgba(.95f,.67f,.29f));
     ui::space(12);
     ImGui::BeginChild("modules",{0,275},ImGuiChildFlags_Borders);
     ImGui::SetWindowFontScale(1.20f); ui::text("Modules"); ImGui::SetWindowFontScale(1.f);
@@ -207,6 +210,9 @@ static void components(DemoState& s) {
     ImGui::Separator();
     ui::space(12);
     ImGui::SetWindowFontScale(1.1f);ui::text("Rendering");ImGui::SetWindowFontScale(1.f);
+    smallText(ui::Overlay::nativeCursorReady() ?
+        "Native ClientInstance cursor: READY" :
+        "Native ClientInstance cursor: WAITING (requires a game cursor event)");
     smallText("TrueType font with oversampled anti-aliasing");
     smallText("Frame-time animation interpolation");
     smallText("Native Minecraft swap-chain rendering");
