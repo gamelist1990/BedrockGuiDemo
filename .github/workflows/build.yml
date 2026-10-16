@@ -1,0 +1,19 @@
+name: GUI demo
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build native Win32/DirectX11 GUI
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BedrockGuiDemo-windows-x64
+          path: build/Release/BedrockGuiDemo.exe
+          if-no-files-found: error
